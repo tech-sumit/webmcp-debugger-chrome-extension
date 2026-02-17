@@ -190,7 +190,7 @@ function truncate(s: string, max: number): string {
 
 /** Approximate byte size of the event data. */
 export function getDataSize(e: InspectorEvent): string {
-  const { type: _t, ts: _ts, ...rest } = e;
+  const { type: _t, ts: _ts, ...rest } = e; // eslint-disable-line @typescript-eslint/no-unused-vars
   const json = JSON.stringify(rest);
   const bytes = new Blob([json]).size;
   if (bytes < 1024) return `${bytes} B`;

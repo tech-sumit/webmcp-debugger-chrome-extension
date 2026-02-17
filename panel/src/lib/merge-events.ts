@@ -170,6 +170,6 @@ export function getEntryHeaders(e: MergedEntry): Array<[string, string]> {
 /* ── Internal ─────────────────────────────────────────────────── */
 
 function jsonLen(ev: InspectorEvent): number {
-  const { type: _, ts: __, ...rest } = ev;
+  const { type: _, ts: __, ...rest } = ev; // eslint-disable-line @typescript-eslint/no-unused-vars
   return JSON.stringify(rest).length;
 }
