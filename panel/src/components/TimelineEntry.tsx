@@ -30,7 +30,7 @@ export function TimelineEntry({ event }: TimelineEntryProps) {
   const color = TYPE_COLORS[event.type] ?? "#999";
   const ts = event.ts ? new Date(event.ts as number).toLocaleTimeString() : "";
 
-  const { type, ts: _ts, ...rest } = event;
+  const { type, ts: _ts, ...rest } = event; // eslint-disable-line @typescript-eslint/no-unused-vars
 
   return (
     <div

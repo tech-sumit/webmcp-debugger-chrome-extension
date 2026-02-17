@@ -18,10 +18,12 @@
     "package": "cd dist && zip -r ../ai-inspector-extension.zip ."
   },
   "devDependencies": {
-    "@tech-sumit/ai-inspector-types": "file:../ai-inspector-types",
+    "@tech-sumit/ai-inspector-types": "^0.2.0",
     "@types/chrome": "^0.0.315",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.56.0",
+    "@typescript-eslint/parser": "^8.56.0",
     "@vitejs/plugin-react": "^4.5.0",
     "autoprefixer": "^10.4.0",
     "concurrently": "^9.0.0",
