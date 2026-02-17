@@ -18,7 +18,7 @@
     "package": "cd dist && zip -r ../ai-inspector-extension.zip ."
   },
   "devDependencies": {
-    "@anthropic/ai-inspector-types": "file:../ai-inspector-types",
+    "@tech-sumit/ai-inspector-types": "file:../ai-inspector-types",
     "@types/chrome": "^0.0.315",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
