@@ -23,5 +23,5 @@
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"
   },
-  "icons": {}
+  "icons": { "128": "icon-128.png" }
 }

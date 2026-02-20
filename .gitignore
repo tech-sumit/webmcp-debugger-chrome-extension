@@ -2,3 +2,4 @@ node_modules/
 dist/
 *.tsbuildinfo
 webmcp-debugger-chrome-extension.zip
+dist.crx
