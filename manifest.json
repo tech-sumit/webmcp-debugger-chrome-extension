@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "DevTools for window.ai and WebMCP introspection",
   "devtools_page": "devtools/devtools.html",
-  "permissions": ["activeTab", "scripting", "tabs", "storage"],
+  "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["<all_urls>"],
   "content_scripts": [
     {
