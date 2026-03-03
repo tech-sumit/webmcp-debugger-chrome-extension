@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.0 (2026-03-04)
+
+### Features
+
+- **Register/unregister error events**: `ai-interceptor.ts` now wraps `registerTool()` and `unregisterTool()` in try/catch and emits `TOOL_REGISTER_ERROR` / `TOOL_UNREGISTER_ERROR` events when the browser throws `InvalidStateError`
+- **`readOnlyHint` in tool metadata**: `toolMeta()` extracts `readOnlyHint` from `annotations` as a top-level field to match the spec's tool definition struct
+- **`readOnlyHint` badge in Tool tab**: `EventDetail` ToolView displays a green/orange badge showing the `readOnlyHint` value when present on `TOOL_REGISTERED` events
+- **Error events in panel**: `TOOL_REGISTER_ERROR` and `TOOL_UNREGISTER_ERROR` added to WebMCP category with red color coding, event name/status/payload/headers handlers, and `isEventError` detection
+- **EXECUTE_TOOL / LIST_TOOLS bridge handler**: `bridge.ts` now handles `chrome.runtime.onMessage` for `EXECUTE_TOOL` and `LIST_TOOLS` actions, forwarding them to `navigator.modelContextTesting` in the page — fixes the existing gap where panel/popup messages had no content script handler
+
+### Bug fixes
+
+- **Background badge on errors**: `TOOL_REGISTER_ERROR` and `TOOL_UNREGISTER_ERROR` added to `TOOL_EVENT_TYPES` set so badge updates correctly on registration failures
+
 ## 1.0.0 (2026-02-17)
 
 ### Features
