@@ -39,11 +39,13 @@ function wrapToolExecute(
 
 /** Extract the serialisable subset of a tool definition for TOOL_REGISTERED events. */
 function toolMeta(toolDef: Record<string, unknown>) {
+  const annotations = toolDef.annotations as Record<string, unknown> | undefined;
   return {
     name: toolDef.name,
     description: toolDef.description,
     inputSchema: toolDef.inputSchema,
     annotations: toolDef.annotations,
+    readOnlyHint: annotations?.readOnlyHint === true ? true : undefined,
   };
 }
 
@@ -138,17 +140,29 @@ function toolMeta(toolDef: Record<string, unknown>) {
 
   const origRegister = mc.registerTool.bind(mc);
   mc.registerTool = function (toolDef: Record<string, unknown>) {
-    const result = origRegister(wrapToolExecute(toolDef));
-    emit("TOOL_REGISTERED", { tool: toolMeta(toolDef), ts: Date.now() });
-    return result;
+    try {
+      const result = origRegister(wrapToolExecute(toolDef));
+      emit("TOOL_REGISTERED", { tool: toolMeta(toolDef), ts: Date.now() });
+      return result;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      emit("TOOL_REGISTER_ERROR", { name: toolDef.name, error: message, ts: Date.now() });
+      throw err;
+    }
   };
 
   if (typeof mc.unregisterTool === "function") {
     const origUnregister = mc.unregisterTool.bind(mc);
     mc.unregisterTool = function (name: string) {
-      const result = origUnregister(name);
-      emit("TOOL_UNREGISTERED", { name, ts: Date.now() });
-      return result;
+      try {
+        const result = origUnregister(name);
+        emit("TOOL_UNREGISTERED", { name, ts: Date.now() });
+        return result;
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        emit("TOOL_UNREGISTER_ERROR", { name, error: message, ts: Date.now() });
+        throw err;
+      }
     };
   }
 

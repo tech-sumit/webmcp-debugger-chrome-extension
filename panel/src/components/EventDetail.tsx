@@ -267,6 +267,7 @@ interface LoggedToolInfo {
   description?: string;
   inputSchema?: unknown;
   annotations?: unknown;
+  readOnlyHint?: boolean;
   args?: unknown;
   result?: unknown;
   error?: string;
@@ -282,17 +283,27 @@ function extractToolInfo(entry: MergedEntry): LoggedToolInfo | null {
   if (req.type === "TOOL_REGISTERED") {
     const t = req.tool as Record<string, unknown> | undefined;
     if (!t?.name) return null;
+    const annotations = t.annotations as Record<string, unknown> | undefined;
     return {
       name: String(t.name),
       description: t.description ? String(t.description) : undefined,
       inputSchema: t.inputSchema,
       annotations: t.annotations,
+      readOnlyHint: (t.readOnlyHint === true) || (annotations?.readOnlyHint === true) || undefined,
       eventType: req.type,
     };
   }
 
   if (req.type === "TOOL_UNREGISTERED") {
     return { name: String(req.name ?? ""), eventType: req.type };
+  }
+
+  if (req.type === "TOOL_REGISTER_ERROR" || req.type === "TOOL_UNREGISTER_ERROR") {
+    return {
+      name: String(req.name ?? ""),
+      error: req.error != null ? String(req.error) : "Unknown error",
+      eventType: req.type,
+    };
   }
 
   if (req.type === "TOOL_CALL") {
@@ -349,6 +360,21 @@ function ToolView({ toolInfo, onExecute }: {
         <InfoRow label="Description">{toolInfo.description}</InfoRow>
       )}
       <InfoRow label="Event">{toolInfo.eventType}</InfoRow>
+      {toolInfo.readOnlyHint != null && (
+        <InfoRow label="Read-Only">
+          <span style={{
+            display: "inline-block",
+            padding: "1px 6px",
+            borderRadius: 3,
+            fontSize: 9,
+            fontWeight: 600,
+            background: toolInfo.readOnlyHint ? "#e8f5e9" : "#fff3e0",
+            color: toolInfo.readOnlyHint ? "#2e7d32" : "#e65100",
+          }}>
+            {toolInfo.readOnlyHint ? "yes" : "no"}
+          </span>
+        </InfoRow>
+      )}
       {toolInfo.sessionId && (
         <InfoRow label="Session">
           <span style={{ fontFamily: "'SF Mono', 'Fira Code', monospace", fontSize: 10 }}>{toolInfo.sessionId}</span>

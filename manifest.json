@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "WebMCP Debugger",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "DevTools for window.ai and WebMCP introspection",
   "devtools_page": "devtools/devtools.html",
   "permissions": ["activeTab", "scripting", "storage"],

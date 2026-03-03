@@ -11,7 +11,7 @@ export type EventCategory = "AI" | "Tool" | "WebMCP" | "Event" | "System";
 export const CATEGORY_TYPES: Record<EventCategory, string[]> = {
   AI: ["SESSION_CREATED", "PROMPT_SENT", "PROMPT_RESPONSE", "PROMPT_ERROR", "STREAM_START", "STREAM_END"],
   Tool: ["TOOL_CALL", "TOOL_RESULT_AI"],
-  WebMCP: ["TOOL_REGISTERED", "TOOL_UNREGISTERED", "CONTEXT_CLEARED"],
+  WebMCP: ["TOOL_REGISTERED", "TOOL_UNREGISTERED", "TOOL_REGISTER_ERROR", "TOOL_UNREGISTER_ERROR", "CONTEXT_CLEARED"],
   Event: ["TOOL_ACTIVATED", "TOOL_CANCEL"],
   System: ["PAGE_RELOAD"],
 };
@@ -36,6 +36,8 @@ export const TYPE_COLORS: Record<string, string> = {
   TOOL_RESULT_AI: "#8bc34a",
   TOOL_REGISTERED: "#4caf50",
   TOOL_UNREGISTERED: "#f44336",
+  TOOL_REGISTER_ERROR: "#f44336",
+  TOOL_UNREGISTER_ERROR: "#f44336",
   CONTEXT_CLEARED: "#ff5722",
   TOOL_ACTIVATED: "#00bcd4",
   TOOL_CANCEL: "#e91e63",
@@ -72,6 +74,9 @@ export function getEventName(e: InspectorEvent): string {
     }
     case "TOOL_UNREGISTERED":
       return String(e.name ?? "unknown");
+    case "TOOL_REGISTER_ERROR":
+    case "TOOL_UNREGISTER_ERROR":
+      return `${String(e.name ?? "unknown")} (${truncate(String(e.error ?? "error"), 40)})`;
     case "CONTEXT_CLEARED":
       return "(all tools)";
     case "TOOL_ACTIVATED":
@@ -106,6 +111,9 @@ export function getEventStatus(e: InspectorEvent): { label: string; color: strin
       return { label: "+", color: "#4caf50" };
     case "TOOL_UNREGISTERED":
       return { label: "−", color: "#f44336" };
+    case "TOOL_REGISTER_ERROR":
+    case "TOOL_UNREGISTER_ERROR":
+      return { label: "error", color: "#f44336" };
     case "CONTEXT_CLEARED":
       return { label: "clear", color: "#ff5722" };
     case "PAGE_RELOAD":
@@ -119,6 +127,7 @@ export function getEventStatus(e: InspectorEvent): { label: string; color: strin
 export function isEventError(e: InspectorEvent): boolean {
   if (e.type === "PROMPT_ERROR") return true;
   if (e.type === "TOOL_RESULT_AI" && e.error != null && e.error !== "") return true;
+  if (e.type === "TOOL_REGISTER_ERROR" || e.type === "TOOL_UNREGISTER_ERROR") return true;
   return false;
 }
 
@@ -136,6 +145,9 @@ export function getPayload(e: InspectorEvent): Record<string, unknown> | null {
       return e.tool as Record<string, unknown>;
     case "TOOL_UNREGISTERED":
       return { name: e.name };
+    case "TOOL_REGISTER_ERROR":
+    case "TOOL_UNREGISTER_ERROR":
+      return { name: e.name, error: e.error };
     case "TOOL_ACTIVATED":
     case "TOOL_CANCEL":
       return { toolName: e.toolName };
@@ -175,6 +187,10 @@ export function getHeaders(e: InspectorEvent): Array<[string, string]> {
       headers.push(["Tool Name", String(tool.name ?? "")]);
       headers.push(["Description", String(tool.description ?? "")]);
     }
+  }
+  if (e.type === "TOOL_REGISTER_ERROR" || e.type === "TOOL_UNREGISTER_ERROR") {
+    headers.push(["Tool Name", String(e.name ?? "")]);
+    headers.push(["Error", String(e.error ?? "")]);
   }
   return headers;
 }

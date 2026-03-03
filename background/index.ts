@@ -14,6 +14,8 @@ const tabManager = new TabManager();
 const TOOL_EVENT_TYPES = new Set([
   "TOOL_REGISTERED",
   "TOOL_UNREGISTERED",
+  "TOOL_REGISTER_ERROR",
+  "TOOL_UNREGISTER_ERROR",
   "CONTEXT_CLEARED",
 ]);
 

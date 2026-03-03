@@ -46,3 +46,37 @@ window.addEventListener("toolcancel", ((event: CustomEvent & { toolName?: string
     data: { toolName, ts: Date.now() },
   });
 }) as EventListener);
+
+// Handle EXECUTE_TOOL and LIST_TOOLS messages from the background service worker.
+// These originate from the DevTools panel or popup and need to be forwarded to
+// the MAIN world via navigator.modelContextTesting.
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg.action === "EXECUTE_TOOL") {
+    const mct = (navigator as Record<string, unknown>).modelContextTesting as
+      | { executeTool: (name: string, args: string) => Promise<string | null> }
+      | undefined;
+    if (!mct) {
+      sendResponse({ error: "modelContextTesting not available" });
+      return true;
+    }
+    mct
+      .executeTool(msg.name as string, msg.inputArgs as string)
+      .then((result) => sendResponse({ result }))
+      .catch((err: unknown) =>
+        sendResponse({ error: err instanceof Error ? err.message : String(err) }),
+      );
+    return true;
+  }
+
+  if (msg.action === "LIST_TOOLS") {
+    const mct = (navigator as Record<string, unknown>).modelContextTesting as
+      | { listTools: () => Array<Record<string, unknown>> }
+      | undefined;
+    if (!mct) {
+      sendResponse({ tools: [] });
+      return true;
+    }
+    sendResponse({ tools: mct.listTools() });
+    return true;
+  }
+});
