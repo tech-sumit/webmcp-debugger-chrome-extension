@@ -52,7 +52,8 @@ window.addEventListener("toolcancel", ((event: CustomEvent & { toolName?: string
 // the MAIN world via navigator.modelContextTesting.
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.action === "EXECUTE_TOOL") {
-    const mct = (navigator as Record<string, unknown>).modelContextTesting as
+    const mct = (navigator as unknown as Record<string, unknown>)
+      .modelContextTesting as
       | { executeTool: (name: string, args: string) => Promise<string | null> }
       | undefined;
     if (!mct) {
@@ -69,7 +70,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 
   if (msg.action === "LIST_TOOLS") {
-    const mct = (navigator as Record<string, unknown>).modelContextTesting as
+    const mct = (navigator as unknown as Record<string, unknown>)
+      .modelContextTesting as
       | { listTools: () => Array<Record<string, unknown>> }
       | undefined;
     if (!mct) {
