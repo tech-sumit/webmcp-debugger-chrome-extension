@@ -32,7 +32,14 @@ function wrapToolExecute(
       return result;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      emit("TOOL_RESULT_AI", { ...base, error: message, ts: Date.now() });
+      // Spec: the execution signal aborts when the agent cancels the call
+      const signal = (options as { signal?: AbortSignal } | undefined)?.signal;
+      emit("TOOL_RESULT_AI", {
+        ...base,
+        error: signal?.aborted ? `Cancelled by agent: ${message}` : message,
+        ...(signal?.aborted && { cancelled: true }),
+        ts: Date.now(),
+      });
       throw err;
     }
   };

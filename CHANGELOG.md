@@ -11,11 +11,13 @@ Aligns with the October 2026 WebMCP draft and Chromium, which moved the API to `
 - **`execute(input, { signal })`**: the wrapped execute callback now forwards the spec's options argument, so tools keep receiving their cancellation signal
 - **New tool metadata**: `TOOL_REGISTERED` carries `title`, normalized `annotations` (`readOnlyHint`, `untrustedContentHint`, `consequentialHint`, `debugging`) and `exposedTo`. The Tool tab shows the title, hint badges and exposed origins
 - **Bridge on the spec API**: `EXECUTE_TOOL` / `LIST_TOOLS` use `document.modelContext.getTools()` and `executeTool(registeredTool, input)`, with a fallback to `navigator.modelContextTesting`. `toolactivated` / `toolcancel` are observed on `document.modelContext` per the spec
+- **Spec error names in the panel**: re-executing a tool from the panel shows the `DOMException` name the spec uses to report failures (`NotFoundError`, `DataError`, `OperationError`, `AbortError`), and a tool result that failed because the agent cancelled the call is marked `Cancelled by agent`
 - **Demo pages** rewritten for the current API: async registration with `AbortController`, `getTools()` / `executeTool()`, invalid-name rejection, `toolchange` logging, and spec-shaped mocks when WebMCP is not enabled
 
 ### Compatibility
 
 - Legacy `unregisterTool`, `provideContext` and `clearContext` are still intercepted when present (Chrome ≤151)
+- A tool whose `inputSchema` string can't be parsed no longer empties the whole `LIST_TOOLS` response
 - Chrome 153 still returns `inputSchema` as a JSON string and expects `executeTool()` input as a JSON string; both are handled. Verified against Chrome 153.0.8010.12
 
 

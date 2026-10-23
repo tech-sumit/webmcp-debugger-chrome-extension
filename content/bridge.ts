@@ -83,7 +83,7 @@ async function executeTool(name: string, inputArgs: string): Promise<string | nu
   const mc = specModelContext();
   if (mc) {
     const tool = (await mc.getTools!()).find((t) => t.name === name);
-    if (!tool) throw new Error(`Tool "${name}" is not registered on this page`);
+    if (!tool) throw new DOMException(`Tool "${name}" is not registered on this page`, "NotFoundError");
     const json = inputArgs || "{}";
     try {
       // Spec: executeTool(tool, inputObject)
@@ -102,6 +102,27 @@ async function executeTool(name: string, inputArgs: string): Promise<string | nu
   return mct.executeTool(name, inputArgs);
 }
 
+/** Spec: object. Chrome 153 still returns a JSON string; one bad schema must not hide the list. */
+function parseSchema(inputSchema: unknown): unknown {
+  if (typeof inputSchema !== "string") return inputSchema;
+  try {
+    return JSON.parse(inputSchema);
+  } catch {
+    return inputSchema;
+  }
+}
+
+/**
+ * Error text for the panel. Keeps the DOMException name, which is how the
+ * spec reports failures (NotFoundError, DataError, OperationError, AbortError).
+ */
+function errorText(err: unknown): string {
+  if (err instanceof Error) {
+    return err.name && err.name !== "Error" ? `${err.name}: ${err.message}` : err.message;
+  }
+  return String(err);
+}
+
 /** List tools via document.modelContext.getTools(), or the legacy testing API. */
 async function listTools(): Promise<Array<Record<string, unknown>>> {
   const mc = specModelContext();
@@ -111,8 +132,7 @@ async function listTools(): Promise<Array<Record<string, unknown>>> {
       name,
       title,
       description,
-      // Spec: object. Chrome 153 still returns the JSON string.
-      inputSchema: typeof inputSchema === "string" ? JSON.parse(inputSchema) : inputSchema,
+      inputSchema: parseSchema(inputSchema),
       origin,
       annotations,
     }));
@@ -129,7 +149,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     executeTool(msg.name as string, msg.inputArgs as string)
       .then((result) => sendResponse({ result }))
       .catch((err: unknown) =>
-        sendResponse({ error: err instanceof Error ? err.message : String(err) }),
+        sendResponse({ error: errorText(err) }),
       );
     return true;
   }
