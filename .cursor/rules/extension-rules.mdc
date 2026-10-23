@@ -12,5 +12,5 @@ globs: ["**/*.{ts,tsx}"]
 - Panel uses React Context + useReducer for state management. NO Redux.
 - Communication: content script -> background (chrome.runtime.sendMessage), panel -> background (chrome.runtime.connect port).
 - NO chrome.debugger API. Tool discovery uses chrome.devtools.inspectedWindow.eval() and content scripts.
-- Tool APIs: modelContextTesting.listTools(), .executeTool(name, args), .registerToolsChangedCallback(cb).
-- All tool args/results are DOMString (JSON-encoded strings) per WebMCP spec.
+- Tool APIs: document.modelContext.registerTool(tool, { signal }) (async; unregister by aborting the signal), .getTools(), .executeTool(registeredTool, inputObject). navigator.modelContextTesting is a legacy fallback only.
+- executeTool resolves with a JSON string; Chrome 153 still expects the input as a JSON string, so try the object form and fall back.

@@ -10,10 +10,13 @@ Chrome DevTools extension for window.ai + WebMCP introspection.
 - NO chrome.debugger API needed
 
 ## Key APIs (from WebMCP spec)
-- navigator.modelContextTesting.listTools() -> Array<{name, description, inputSchema: string}>
-- navigator.modelContextTesting.executeTool(name: string, args: string) -> Promise<string|null>
-- navigator.modelContextTesting.registerToolsChangedCallback(cb)
-- Window events: 'toolactivated', 'toolcancel'
+- document.modelContext.registerTool(tool, { signal?, exposedTo? }) -> Promise<undefined>; tool = {name, title?, description, inputSchema?, execute(input, {signal}), annotations?}
+- Unregister by aborting the registration signal (unregisterTool/provideContext/clearContext were removed from the spec; still patched for older Chrome)
+- annotations: readOnlyHint, untrustedContentHint, consequentialHint, debugging (all default false)
+- document.modelContext.getTools() -> Promise<RegisteredTool[]> ({name, title, description, inputSchema, window, origin, annotations})
+- document.modelContext.executeTool(registeredTool, inputObject) -> Promise<string> (Chrome 153 still wants a JSON string input — try object, fall back to string)
+- Events on document.modelContext: 'toolchange', 'toolactivated', 'toolcancel' (older Chrome fired the latter two at window)
+- navigator.modelContextTesting is gone as of Chrome 152; kept only as a fallback
 
 ## Build
 - 3 Vite configs: HTML pages (vite.config.ts), content scripts IIFE (vite.config.content.ts), background IIFE (vite.config.background.ts)

@@ -14,8 +14,11 @@ interface StoredEvent {
 
 interface ToolInfo {
   name: string;
+  title?: string;
   description: string;
   inputSchema: string;
+  annotations?: Record<string, boolean>;
+  readOnlyHint?: boolean;
 }
 
 const STORAGE_KEY = "webmcp_debugger_events";
@@ -119,11 +122,19 @@ export class EventStore {
 
   private applyToolEventTo(toolMap: Map<string, ToolInfo>, event: StoredEvent): void {
     if (event.type === "TOOL_REGISTERED" && event.tool) {
-      const t = event.tool as { name: string; description?: string; inputSchema?: unknown };
+      const t = event.tool as {
+        name: string;
+        title?: string;
+        description?: string;
+        inputSchema?: unknown;
+        annotations?: Record<string, boolean>;
+      };
       toolMap.set(t.name, {
         name: t.name,
+        ...(t.title && { title: t.title }),
         description: t.description ?? "",
         inputSchema: typeof t.inputSchema === "string" ? t.inputSchema : JSON.stringify(t.inputSchema ?? {}),
+        ...(t.annotations && { annotations: t.annotations, readOnlyHint: t.annotations.readOnlyHint === true }),
       });
     } else if (event.type === "TOOL_UNREGISTERED" && typeof event.name === "string") {
       toolMap.delete(event.name);

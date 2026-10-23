@@ -264,10 +264,15 @@ function TimingView({ entry }: { entry: MergedEntry }) {
 /** All tool-related data extracted from the logged event pair. */
 interface LoggedToolInfo {
   name: string;
+  title?: string;
   description?: string;
   inputSchema?: unknown;
   annotations?: unknown;
   readOnlyHint?: boolean;
+  untrustedContentHint?: boolean;
+  consequentialHint?: boolean;
+  debugging?: boolean;
+  exposedTo?: string[];
   args?: unknown;
   result?: unknown;
   error?: string;
@@ -286,10 +291,15 @@ function extractToolInfo(entry: MergedEntry): LoggedToolInfo | null {
     const annotations = t.annotations as Record<string, unknown> | undefined;
     return {
       name: String(t.name),
+      title: t.title ? String(t.title) : undefined,
       description: t.description ? String(t.description) : undefined,
       inputSchema: t.inputSchema,
       annotations: t.annotations,
       readOnlyHint: (t.readOnlyHint === true) || (annotations?.readOnlyHint === true) || undefined,
+      untrustedContentHint: annotations?.untrustedContentHint === true || undefined,
+      consequentialHint: annotations?.consequentialHint === true || undefined,
+      debugging: annotations?.debugging === true || undefined,
+      exposedTo: Array.isArray(t.exposedTo) ? t.exposedTo.map(String) : undefined,
       eventType: req.type,
     };
   }
@@ -337,6 +347,28 @@ function extractToolInfo(entry: MergedEntry): LoggedToolInfo | null {
   return null;
 }
 
+/** Small pill for a WebMCP annotation hint. */
+function HintBadge({ children, color, background }: {
+  children: React.ReactNode;
+  color: string;
+  background: string;
+}) {
+  return (
+    <span style={{
+      display: "inline-block",
+      padding: "1px 6px",
+      marginRight: 4,
+      borderRadius: 3,
+      fontSize: 9,
+      fontWeight: 600,
+      background,
+      color,
+    }}>
+      {children}
+    </span>
+  );
+}
+
 function ToolView({ toolInfo, onExecute }: {
   toolInfo: LoggedToolInfo;
   onExecute?: (name: string, args: Record<string, unknown>) => void;
@@ -356,6 +388,9 @@ function ToolView({ toolInfo, onExecute }: {
       <InfoRow label="Name">
         <strong style={{ color: hasError ? "#f44336" : "#4caf50" }}>{toolInfo.name}</strong>
       </InfoRow>
+      {toolInfo.title && (
+        <InfoRow label="Title">{toolInfo.title}</InfoRow>
+      )}
       {toolInfo.description && (
         <InfoRow label="Description">{toolInfo.description}</InfoRow>
       )}
@@ -374,6 +409,16 @@ function ToolView({ toolInfo, onExecute }: {
             {toolInfo.readOnlyHint ? "yes" : "no"}
           </span>
         </InfoRow>
+      )}
+      {(toolInfo.consequentialHint || toolInfo.untrustedContentHint || toolInfo.debugging) && (
+        <InfoRow label="Hints">
+          {toolInfo.consequentialHint && <HintBadge color="#c62828" background="#ffebee">consequential</HintBadge>}
+          {toolInfo.untrustedContentHint && <HintBadge color="#6a1b9a" background="#f3e5f5">untrusted content</HintBadge>}
+          {toolInfo.debugging && <HintBadge color="#455a64" background="#eceff1">debugging</HintBadge>}
+        </InfoRow>
+      )}
+      {toolInfo.exposedTo && toolInfo.exposedTo.length > 0 && (
+        <InfoRow label="Exposed To">{toolInfo.exposedTo.join(", ")}</InfoRow>
       )}
       {toolInfo.sessionId && (
         <InfoRow label="Session">

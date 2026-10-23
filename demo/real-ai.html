@@ -111,7 +111,7 @@
     </div>
 
     <div class="section">
-      <div class="section-title">WebMCP Tools (navigator.modelContext)</div>
+      <div class="section-title">WebMCP Tools (document.modelContext)</div>
       <div id="tool-list"></div>
       <div class="btn-row">
         <button onclick="registerAllTools()" class="primary sm">Register All</button>
@@ -290,43 +290,67 @@ const TOOL_DEFS = {
   }
 };
 
-// ── navigator.modelContext — Tool Registration ───────────────
+// ── document.modelContext — Tool Registration ────────────────
 // Register tools with the real/mock WebMCP API so the WebMCP Debugger
 // extension can observe TOOL_REGISTERED, TOOL_CALL, TOOL_RESULT_AI events.
+// Per spec, tools are unregistered by aborting the signal passed at registration.
 
-function safeRegister(toolDef) {
-  try { navigator.modelContext.unregisterTool(toolDef.name); } catch (_) {}
+const toolControllers = new Map(); // name → AbortController
+
+async function safeRegister(toolDef) {
+  toolControllers.get(toolDef.name)?.abort();
+  const controller = new AbortController();
+  toolControllers.set(toolDef.name, controller);
   const registration = {
     name: toolDef.name,
     description: toolDef.description,
     inputSchema: toolDef.inputSchema,
+    annotations: { readOnlyHint: true },
     execute(args) {
       return toolDef.execute(typeof args === 'string' ? JSON.parse(args) : args);
     }
   };
-  navigator.modelContext.registerTool(registration);
+  await document.modelContext.registerTool(registration, { signal: controller.signal });
   registeredTools.set(toolDef.name, toolDef);
 }
 
-function registerAllTools() {
-  for (const def of Object.values(TOOL_DEFS)) {
-    safeRegister(def);
+async function registerAllTools() {
+  try {
+    await Promise.all(Object.values(TOOL_DEFS).map(safeRegister));
+  } catch (e) {
+    addErrorMsg('registerTool failed: ' + e.message);
   }
   updateToolUI();
-  addSystemMsg(`Registered ${registeredTools.size} tools via navigator.modelContext`);
+  addSystemMsg(`Registered ${registeredTools.size} tools via document.modelContext`);
 }
 
 function safeClearContext() {
-  try { navigator.modelContext.clearContext(); } catch (_) {}
+  for (const controller of toolControllers.values()) controller.abort();
+  toolControllers.clear();
   registeredTools.clear();
   updateToolUI();
-  addSystemMsg('All tools cleared');
+  addSystemMsg('All tools unregistered');
 }
 
 function unregisterOneTool(name) {
-  try { navigator.modelContext.unregisterTool(name); } catch (_) {}
+  toolControllers.get(name)?.abort();
+  toolControllers.delete(name);
   registeredTools.delete(name);
   updateToolUI();
+}
+
+/** Execute a tool by name: spec form first, then Chrome 153's JSON-string form. */
+async function executeToolByName(name, args) {
+  const tool = (await document.modelContext.getTools()).find(t => t.name === name);
+  if (!tool) throw new DOMException(`Tool "${name}" not found`, 'NotFoundError');
+  try {
+    return await document.modelContext.executeTool(tool, args);
+  } catch (e) {
+    if (e.name === 'TypeError' || /parse input/i.test(e.message)) {
+      return document.modelContext.executeTool(tool, JSON.stringify(args));
+    }
+    throw e;
+  }
 }
 
 function updateToolUI() {
@@ -338,30 +362,28 @@ function updateToolUI() {
     : names.map(n => `<span class="tool-chip"><span class="dot"></span>${n}<button onclick="unregisterOneTool('${n}')">&times;</button></span>`).join('');
 }
 
-// If navigator.modelContext doesn't exist (no Chrome Canary), install a minimal mock
-if (!navigator.modelContext) {
+// If document.modelContext doesn't exist (WebMCP not enabled), install a minimal spec-shaped mock
+if (!document.modelContext) {
   const _tools = new Map();
-  Object.defineProperty(navigator, 'modelContext', {
-    value: {
-      registerTool(t) { if (_tools.has(t.name)) throw new DOMException('Duplicate','InvalidStateError'); _tools.set(t.name, t); },
-      unregisterTool(n) { if (!_tools.has(n)) throw new DOMException('Not found','InvalidStateError'); _tools.delete(n); },
-      provideContext(p) { _tools.clear(); (p?.tools||[]).forEach(t => _tools.set(t.name, t)); },
-      clearContext() { _tools.clear(); }
-    }, configurable: true
+  const mock = new EventTarget();
+  Object.assign(mock, {
+    async registerTool(t, options = {}) {
+      if (_tools.has(t.name)) throw new DOMException('Duplicate', 'InvalidStateError');
+      if (options.signal?.aborted) throw options.signal.reason;
+      _tools.set(t.name, t);
+      options.signal?.addEventListener('abort', () => _tools.delete(t.name), { once: true });
+    },
+    async getTools() {
+      return [..._tools.values()].map(t => ({ name: t.name, title: '', description: t.description, inputSchema: t.inputSchema, origin: location.origin, window }));
+    },
+    async executeTool(tool, input = {}) {
+      const t = _tools.get(tool.name);
+      if (!t) throw new DOMException('Not found', 'NotFoundError');
+      const result = await t.execute(typeof input === 'string' ? JSON.parse(input) : input, { signal: new AbortController().signal });
+      return JSON.stringify(result);
+    }
   });
-}
-if (!navigator.modelContextTesting) {
-  Object.defineProperty(navigator, 'modelContextTesting', {
-    value: {
-      listTools() { return [...registeredTools.values()].map(t => ({ name: t.name, description: t.description, inputSchema: JSON.stringify(t.inputSchema) })); },
-      async executeTool(name, argsJson) {
-        const t = registeredTools.get(name);
-        if (!t) throw new DOMException('Not found','InvalidStateError');
-        return t.execute(typeof argsJson === 'string' ? JSON.parse(argsJson) : argsJson);
-      },
-      registerToolsChangedCallback() {}
-    }, configurable: true
-  });
+  Object.defineProperty(document, 'modelContext', { value: mock, configurable: true });
 }
 
 // ── Gemini API Integration ───────────────────────────────────
@@ -435,8 +457,8 @@ async function promptAI(message) {
         addToolCallMsg(name, inputArgs);
 
         try {
-          // Execute via navigator.modelContextTesting (same as model-context-tool-inspector)
-          const result = await navigator.modelContextTesting.executeTool(name, inputArgs);
+          // Execute via document.modelContext.getTools() + executeTool()
+          const result = await executeToolByName(name, args);
           toolResponses.push({ functionResponse: { name, response: { result } } });
           addToolResultMsg(name, result);
         } catch (e) {
