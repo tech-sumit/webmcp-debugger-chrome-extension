@@ -1,6 +1,6 @@
 # WebMCP Debugger Chrome Extension
 
-Chrome DevTools extension for introspecting `window.ai` (Prompt API / Gemini Nano) and `navigator.modelContext` (WebMCP) on any web page.
+Chrome DevTools extension for introspecting `window.ai` (Prompt API / Gemini Nano) and `document.modelContext` (WebMCP) on any web page.
 
 ## Features
 
@@ -10,7 +10,7 @@ Chrome DevTools extension for introspecting `window.ai` (Prompt API / Gemini Nan
 
 ## Requirements
 
-- Chrome 146+ with `chrome://flags/#webmcp-testing` enabled
+- Chrome 149+ with `chrome://flags/#enable-webmcp-testing` enabled (or a page enrolled in the WebMCP origin trial). Older builds that only expose `navigator.modelContext` are still supported
 - For window.ai features: `chrome://flags/#optimization-guide-on-device-model` enabled
 
 ## Installation

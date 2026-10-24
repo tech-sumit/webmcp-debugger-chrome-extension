@@ -351,13 +351,13 @@
     </div>
   </div>
 
-  <!-- navigator.modelContext Card -->
+  <!-- document.modelContext Card -->
   <div class="card">
     <div class="card-header">
       <div class="icon mcp">&#9881;</div>
       <div>
-        <h2>navigator.modelContext — WebMCP</h2>
-        <p>Register tools, provide context, execute</p>
+        <h2>document.modelContext — WebMCP</h2>
+        <p>Register tools, unregister via AbortSignal, discover and execute</p>
       </div>
     </div>
     <div class="card-body">
@@ -370,18 +370,19 @@
 
       <div class="section-label">Bulk Operations</div>
       <div class="btn-group">
-        <button onclick="provideContextAll()" class="primary">provideContext (all 3)</button>
-        <button onclick="clearContext()" class="danger">clearContext</button>
+        <button onclick="registerAll()" class="primary">Register all 3</button>
+        <button onclick="unregisterAll()" class="danger">Unregister all (abort signals)</button>
+        <button onclick="registerInvalid()" class="danger">Register invalid name</button>
       </div>
 
-      <div class="section-label">Unregister</div>
+      <div class="section-label">Unregister (AbortController.abort())</div>
       <div class="btn-group">
         <button onclick="unregisterTool('calculator')" class="danger">Unregister: calculator</button>
         <button onclick="unregisterTool('get_weather')" class="danger">Unregister: get_weather</button>
         <button onclick="unregisterTool('web_search')" class="danger">Unregister: web_search</button>
       </div>
 
-      <div class="section-label">Tool Execution (via modelContextTesting)</div>
+      <div class="section-label">Tool Execution (getTools() + executeTool())</div>
       <textarea id="tool-args" placeholder='{"expression": "2+2"}'>{"expression": "2 + 2"}</textarea>
       <div class="btn-group">
         <button onclick="executeTool('calculator')">Execute: calculator</button>
@@ -389,7 +390,7 @@
         <button onclick="listTools()" class="success">List Tools</button>
       </div>
 
-      <div class="section-label">Window Events</div>
+      <div class="section-label">ModelContext Events</div>
       <div class="btn-group">
         <button onclick="fireToolActivated()">Fire: toolactivated</button>
         <button onclick="fireToolCancel()">Fire: toolcancel</button>
@@ -552,116 +553,101 @@ if (!globalThis.LanguageModel) {
   log('ai', 'Mock LanguageModel installed on globalThis');
 }
 
-// ── navigator.modelContext (WebMCP) ──────────────────────────
-// Works with BOTH the real browser API (Chrome Canary) and a mock fallback.
-// The extension intercepts registerTool, unregisterTool, provideContext, clearContext.
+// ── document.modelContext (WebMCP) ───────────────────────────
+// Works with BOTH the real browser API (Chrome 149+) and a mock fallback.
+// Per the current spec: registerTool(tool, { signal }) returns a promise,
+// tools are unregistered by aborting the signal, and in-page agents use
+// getTools() / executeTool(). The extension intercepts registerTool.
 
-const registeredTools = new Map(); // local tracking (for UI status + mock fallback)
-let toolsChangedCallbacks = [];
-const usingRealModelContext = !!navigator.modelContext;
+const registeredTools = new Map(); // name → { def, controller } (UI status + unregistration)
+const usingRealModelContext = !!document.modelContext;
 
-if (!navigator.modelContext) {
-  Object.defineProperty(navigator, 'modelContext', {
-    value: {
-      registerTool(toolDef) {
-        if (registeredTools.has(toolDef.name)) {
-          throw new DOMException(`Tool "${toolDef.name}" already registered`, 'InvalidStateError');
-        }
-        registeredTools.set(toolDef.name, toolDef);
-        log('mcp', `registerTool("${toolDef.name}")`, { description: toolDef.description });
-        notifyToolsChanged();
-      },
-
-      unregisterTool(name) {
-        if (!registeredTools.has(name)) {
-          throw new DOMException(`Tool "${name}" not found`, 'InvalidStateError');
-        }
-        registeredTools.delete(name);
-        log('mcp', `unregisterTool("${name}")`);
-        notifyToolsChanged();
-      },
-
-      provideContext(params) {
-        registeredTools.clear();
-        if (Array.isArray(params?.tools)) {
-          for (const tool of params.tools) {
-            registeredTools.set(tool.name, tool);
-          }
-        }
-        log('mcp', `provideContext() — ${registeredTools.size} tools set`);
-        notifyToolsChanged();
-      },
-
-      clearContext() {
-        registeredTools.clear();
-        log('mcp', 'clearContext() — all tools removed');
-        notifyToolsChanged();
+if (!document.modelContext) {
+  const mockTools = new Map();
+  const mock = new EventTarget();
+  const fireToolChange = () => mock.dispatchEvent(new Event('toolchange'));
+  Object.assign(mock, {
+    async registerTool(toolDef, options = {}) {
+      if (!toolDef.name || toolDef.name.length > 128 || /[^A-Za-z0-9_.-]/.test(toolDef.name)) {
+        throw new DOMException('Invalid tool name', 'InvalidStateError');
       }
+      if (!toolDef.description) throw new DOMException('Empty description', 'InvalidStateError');
+      if (mockTools.has(toolDef.name)) {
+        throw new DOMException(`Tool "${toolDef.name}" already registered`, 'InvalidStateError');
+      }
+      if (options.signal?.aborted) throw options.signal.reason;
+      mockTools.set(toolDef.name, toolDef);
+      options.signal?.addEventListener('abort', () => {
+        mockTools.delete(toolDef.name);
+        log('mcp', `unregistered "${toolDef.name}" (signal aborted)`);
+        fireToolChange();
+      }, { once: true });
+      log('mcp', `registerTool("${toolDef.name}")`, { description: toolDef.description });
+      fireToolChange();
     },
-    writable: false,
-    configurable: true
-  });
-  log('mcp', 'Mock navigator.modelContext installed');
-} else {
-  log('mcp', 'Using real navigator.modelContext (browser-native)');
-}
 
-// Mock navigator.modelContextTesting if browser doesn't provide it
-if (!navigator.modelContextTesting) {
-  Object.defineProperty(navigator, 'modelContextTesting', {
-    value: {
-      listTools() {
-        const tools = Array.from(registeredTools.values()).map(t => ({
+    async getTools() {
+      return Array.from(mockTools.values())
+        .map(t => ({
           name: t.name,
-          description: t.description || '',
-          inputSchema: typeof t.inputSchema === 'string' ? t.inputSchema : JSON.stringify(t.inputSchema || {}),
-        }));
-        log('mcp', `listTools() → ${tools.length} tools`);
-        return tools;
-      },
-
-      async executeTool(name, argsJson) {
-        const tool = registeredTools.get(name);
-        if (!tool) throw new DOMException(`Tool "${name}" not found`, 'InvalidStateError');
-        const args = typeof argsJson === 'string' ? JSON.parse(argsJson) : argsJson;
-        log('mcp', `executeTool("${name}")`, args);
-        if (typeof tool.execute === 'function') {
-          const result = await tool.execute(args);
-          return typeof result === 'string' ? result : JSON.stringify(result);
-        }
-        return JSON.stringify({ ok: true, tool: name });
-      },
-
-      registerToolsChangedCallback(cb) {
-        toolsChangedCallbacks.push(cb);
-        log('mcp', 'Registered tools-changed callback');
-      }
+          title: t.title || '',
+          description: t.description,
+          inputSchema: t.inputSchema,
+          annotations: t.annotations,
+          origin: location.origin,
+          window,
+        }))
+        .sort((a, b) => (a.name < b.name ? -1 : 1));
     },
-    writable: false,
-    configurable: true
+
+    async executeTool(registeredTool, input = {}) {
+      const tool = mockTools.get(registeredTool.name);
+      if (!tool) throw new DOMException(`Tool "${registeredTool.name}" not found`, 'NotFoundError');
+      const args = typeof input === 'string' ? JSON.parse(input) : input;
+      const controller = new AbortController();
+      const result = await tool.execute(args, { signal: controller.signal });
+      return JSON.stringify(result);
+    },
   });
-  log('mcp', 'Mock navigator.modelContextTesting installed');
+  Object.defineProperty(document, 'modelContext', { value: mock, configurable: true });
+  log('mcp', 'Mock document.modelContext installed');
 } else {
-  log('mcp', 'Using real navigator.modelContextTesting (browser-native)');
+  log('mcp', 'Using real document.modelContext (browser-native)');
 }
 
-function notifyToolsChanged() {
-  for (const cb of toolsChangedCallbacks) {
-    try { cb(); } catch (e) { console.error('toolsChanged callback error:', e); }
+document.modelContext.addEventListener('toolchange', () => log('evt', 'toolchange'));
+
+// Safe registration: aborts any previous registration of the same name first.
+// Works with both real browser API and mock.
+async function safeRegisterTool(toolDef) {
+  registeredTools.get(toolDef.name)?.controller.abort();
+  const controller = new AbortController();
+  registeredTools.set(toolDef.name, { def: toolDef, controller });
+  try {
+    await document.modelContext.registerTool(toolDef, { signal: controller.signal });
+  } catch (e) {
+    if (registeredTools.get(toolDef.name)?.controller === controller) registeredTools.delete(toolDef.name);
+    throw e;
   }
 }
 
-// Safe registration: unregisters first if already registered (avoids DOMException).
-// Works with both real browser API and mock.
-function safeRegisterTool(toolDef) {
-  try { navigator.modelContext.unregisterTool(toolDef.name); } catch (_) { /* not registered, fine */ }
-  navigator.modelContext.registerTool(toolDef);
-  registeredTools.set(toolDef.name, toolDef); // keep local tracking in sync for real API
+function safeUnregisterAll() {
+  for (const { controller } of registeredTools.values()) controller.abort();
+  registeredTools.clear();
 }
 
-function safeClearContext() {
-  try { navigator.modelContext.clearContext(); } catch (_) { /* ignore */ }
-  registeredTools.clear();
+/** Execute a tool by name: spec form first, then Chrome 153's JSON-string form. */
+async function runTool(name, input) {
+  const tool = (await document.modelContext.getTools()).find(t => t.name === name);
+  if (!tool) throw new DOMException(`Tool "${name}" not found`, 'NotFoundError');
+  try {
+    return await document.modelContext.executeTool(tool, input);
+  } catch (e) {
+    if (e.name === 'TypeError' || /parse input/i.test(e.message)) {
+      return document.modelContext.executeTool(tool, JSON.stringify(input));
+    }
+    throw e;
+  }
 }
 
 // ── Tool Definitions ─────────────────────────────────────────
@@ -669,6 +655,7 @@ function safeClearContext() {
 const TOOL_DEFS = {
   calculator: {
     name: 'calculator',
+    title: 'Calculator',
     description: 'Evaluate a mathematical expression and return the result.',
     inputSchema: {
       type: 'object',
@@ -677,7 +664,7 @@ const TOOL_DEFS = {
       },
       required: ['expression']
     },
-    annotations: { audience: ['user', 'assistant'], idempotent: true },
+    annotations: { readOnlyHint: true },
     execute(args) {
       try {
         const result = Function('"use strict"; return (' + args.expression + ')')();
@@ -692,6 +679,7 @@ const TOOL_DEFS = {
 
   get_weather: {
     name: 'get_weather',
+    title: 'Weather',
     description: 'Get the current weather for a given city.',
     inputSchema: {
       type: 'object',
@@ -701,7 +689,7 @@ const TOOL_DEFS = {
       },
       required: ['city']
     },
-    annotations: { audience: ['user'], idempotent: true },
+    annotations: { readOnlyHint: true, untrustedContentHint: true },
     execute(args) {
       const temp = Math.round(15 + Math.random() * 20);
       const conditions = ['sunny', 'cloudy', 'partly cloudy', 'rainy', 'windy'];
@@ -715,6 +703,7 @@ const TOOL_DEFS = {
 
   web_search: {
     name: 'web_search',
+    title: 'Web search',
     description: 'Search the web for information on a given query.',
     inputSchema: {
       type: 'object',
@@ -724,7 +713,7 @@ const TOOL_DEFS = {
       },
       required: ['query']
     },
-    annotations: { audience: ['assistant'], readOnlyHint: true },
+    annotations: { readOnlyHint: true, untrustedContentHint: true },
     execute(args) {
       const results = [
         { title: `Result 1 for "${args.query}"`, url: 'https://example.com/1', snippet: 'This is a mock search result...' },
@@ -751,7 +740,7 @@ function updateStatus() {
   const toolsEl = document.getElementById('status-tools');
 
   const hasAi = !!globalThis.LanguageModel;
-  const hasMc = !!navigator.modelContext;
+  const hasMc = !!document.modelContext;
 
   aiEl.textContent = hasAi ? (globalThis._usingRealLM ? 'Native' : 'Mock') : 'Unavailable';
   aiEl.className = 'value ' + (hasAi ? 'on' : 'off');
@@ -864,91 +853,96 @@ async function triggerToolCall() {
   }
 }
 
-// ── navigator.modelContext Actions ───────────────────────────
+// ── document.modelContext Actions ────────────────────────────
 
-function registerCalculator() {
-  try { safeRegisterTool({ ...TOOL_DEFS.calculator }); }
+async function registerCalculator() {
+  try { await safeRegisterTool({ ...TOOL_DEFS.calculator }); }
   catch (e) { log('mcp', 'Error: ' + e.message); }
   updateStatus();
 }
 
-function registerWeather() {
-  try { safeRegisterTool({ ...TOOL_DEFS.get_weather }); }
+async function registerWeather() {
+  try { await safeRegisterTool({ ...TOOL_DEFS.get_weather }); }
   catch (e) { log('mcp', 'Error: ' + e.message); }
   updateStatus();
 }
 
-function registerSearch() {
-  try { safeRegisterTool({ ...TOOL_DEFS.web_search }); }
+async function registerSearch() {
+  try { await safeRegisterTool({ ...TOOL_DEFS.web_search }); }
   catch (e) { log('mcp', 'Error: ' + e.message); }
   updateStatus();
 }
 
 function unregisterTool(name) {
+  const entry = registeredTools.get(name);
+  if (!entry) {
+    log('mcp', `"${name}" is not registered`);
+    return;
+  }
+  entry.controller.abort();
+  registeredTools.delete(name);
+  updateStatus();
+}
+
+async function registerAll() {
   try {
-    navigator.modelContext.unregisterTool(name);
-    registeredTools.delete(name);
+    await Promise.all([
+      safeRegisterTool({ ...TOOL_DEFS.calculator }),
+      safeRegisterTool({ ...TOOL_DEFS.get_weather }),
+      safeRegisterTool({ ...TOOL_DEFS.web_search }),
+    ]);
   } catch (e) { log('mcp', 'Error: ' + e.message); }
   updateStatus();
 }
 
-function provideContextAll() {
-  try {
-    navigator.modelContext.provideContext({
-      tools: [
-        { ...TOOL_DEFS.calculator },
-        { ...TOOL_DEFS.get_weather },
-        { ...TOOL_DEFS.web_search },
-      ]
-    });
-    // Sync local tracking for real API
-    registeredTools.clear();
-    registeredTools.set('calculator', TOOL_DEFS.calculator);
-    registeredTools.set('get_weather', TOOL_DEFS.get_weather);
-    registeredTools.set('web_search', TOOL_DEFS.web_search);
-  } catch (e) { log('mcp', 'Error: ' + e.message); }
+function unregisterAll() {
+  safeUnregisterAll();
   updateStatus();
 }
 
-function clearContext() {
-  safeClearContext();
-  updateStatus();
+async function registerInvalid() {
+  // Spec: names must be 1-128 chars of [A-Za-z0-9_.-]; rejects with InvalidStateError
+  try {
+    await document.modelContext.registerTool({ name: 'bad name!', description: 'Invalid', execute: () => null });
+  } catch (e) { log('mcp', `Expected rejection: ${e.name}: ${e.message}`); }
 }
 
 async function executeTool(name) {
   const argsInput = document.getElementById('tool-args').value;
   try {
-    const result = await navigator.modelContextTesting.executeTool(name, argsInput);
+    const result = await runTool(name, JSON.parse(argsInput || '{}'));
     log('mcp', `executeTool result:`, JSON.parse(result || '{}'));
   } catch (e) {
     log('mcp', 'Execute error: ' + e.message);
   }
 }
 
-function listTools() {
+async function listTools() {
   try {
-    const tools = navigator.modelContextTesting.listTools();
+    const tools = await document.modelContext.getTools();
     log('mcp', 'Tools list:', tools.map(t => t.name));
   } catch (e) {
     log('mcp', 'Error: ' + e.message);
   }
 }
 
-// ── Window Events ────────────────────────────────────────────
+// ── ModelContext Events ──────────────────────────────────────
+// Per spec, ToolActivatedEvent / ToolCancelEvent are fired at document.modelContext.
+
+function toolEvent(type, toolName) {
+  const Ctor = type === 'toolactivated' ? globalThis.ToolActivatedEvent : globalThis.ToolCancelEvent;
+  return typeof Ctor === 'function'
+    ? new Ctor(type, { toolName })
+    : Object.assign(new Event(type), { toolName });
+}
 
 function fireToolActivated() {
-  const evt = new CustomEvent('toolactivated', {
-    detail: { tool: 'calculator', args: { expression: '1+1' }, requestId: crypto.randomUUID() }
-  });
-  window.dispatchEvent(evt);
+  document.modelContext.dispatchEvent(toolEvent('toolactivated', 'calculator'));
   log('evt', 'Dispatched toolactivated event');
 }
 
 function fireToolCancel() {
-  const evt = new CustomEvent('toolcancel', {
-    detail: { tool: 'calculator', requestId: crypto.randomUUID() }
-  });
-  window.dispatchEvent(evt);
+  document.modelContext.dispatchEvent(toolEvent('toolcancel', 'calculator'));
   log('evt', 'Dispatched toolcancel event');
 }
 
@@ -1011,60 +1005,50 @@ async function scenarioMcpLifecycle() {
   log('mcp', '── Scenario: WebMCP Full Lifecycle ──');
 
   // 0. Clear any leftover state from previous runs
-  safeClearContext();
+  safeUnregisterAll();
   await delay(200);
 
   // 1. Register tools individually (safe — handles duplicates)
-  safeRegisterTool({ ...TOOL_DEFS.calculator });
-  await delay(300);
-  safeRegisterTool({ ...TOOL_DEFS.get_weather });
+  try {
+    await safeRegisterTool({ ...TOOL_DEFS.calculator });
+    await delay(300);
+    await safeRegisterTool({ ...TOOL_DEFS.get_weather });
+  } catch (e) { log('mcp', 'Register error: ' + e.message); }
   await delay(300);
 
   // 2. List tools
-  try { navigator.modelContextTesting.listTools(); } catch (_) {}
+  await listTools();
   await delay(300);
 
   // 3. Execute a tool
   try {
-    await navigator.modelContextTesting.executeTool('calculator', '{"expression": "100 / 4"}');
+    await runTool('calculator', { expression: '100 / 4' });
   } catch (e) { log('mcp', 'Execute error: ' + e.message); }
   await delay(300);
 
-  // 4. Unregister one
-  try {
-    navigator.modelContext.unregisterTool('calculator');
-    registeredTools.delete('calculator');
-  } catch (e) { log('mcp', 'Unregister error: ' + e.message); }
+  // 4. Unregister one by aborting its signal
+  unregisterTool('calculator');
   await delay(300);
 
-  // 5. Use provideContext to replace everything
-  try {
-    navigator.modelContext.provideContext({
-      tools: [
-        { ...TOOL_DEFS.calculator },
-        { ...TOOL_DEFS.web_search },
-      ]
-    });
-    registeredTools.clear();
-    registeredTools.set('calculator', TOOL_DEFS.calculator);
-    registeredTools.set('web_search', TOOL_DEFS.web_search);
-  } catch (e) { log('mcp', 'provideContext error: ' + e.message); }
+  // 5. Invalid registration is rejected
+  await registerInvalid();
   await delay(300);
 
-  // 6. Execute via testing API
+  // 6. Register another tool and execute it
   try {
-    await navigator.modelContextTesting.executeTool('web_search', '{"query": "WebMCP spec"}');
+    await safeRegisterTool({ ...TOOL_DEFS.web_search });
+    await runTool('web_search', { query: 'WebMCP spec' });
   } catch (e) { log('mcp', 'Execute error: ' + e.message); }
   await delay(300);
 
-  // 7. Fire window events
+  // 7. Fire ModelContext events
   fireToolActivated();
   await delay(200);
   fireToolCancel();
   await delay(200);
 
-  // 8. Clear context
-  safeClearContext();
+  // 8. Unregister everything
+  safeUnregisterAll();
   await delay(200);
 
   log('mcp', '── Scenario complete ──');
