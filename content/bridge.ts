@@ -30,18 +30,20 @@ window.addEventListener("message", (event) => {
   });
 });
 
-interface RegisteredTool {
+/** The spec's `Tool` interface (was the `RegisteredTool` dictionary). */
+interface Tool {
   name: string;
   title?: string;
   description: string;
   inputSchema?: unknown;
+  outputSchema?: unknown;
   origin?: string;
   annotations?: Record<string, boolean>;
 }
 
 interface SpecModelContext extends EventTarget {
-  getTools?: () => Promise<RegisteredTool[]>;
-  executeTool?: (tool: RegisteredTool, input?: unknown) => Promise<string>;
+  getTools?: () => Promise<Tool[]>;
+  executeTool?: (tool: Tool, input?: unknown) => Promise<string>;
 }
 
 interface LegacyModelContextTesting {
@@ -127,12 +129,13 @@ function errorText(err: unknown): string {
 async function listTools(): Promise<Array<Record<string, unknown>>> {
   const mc = specModelContext();
   if (mc) {
-    // RegisteredTool.window is not serialisable across the extension message channel
-    return (await mc.getTools!()).map(({ name, title, description, inputSchema, origin, annotations }) => ({
+    // Tool.source (a WindowProxy) is not serialisable across the extension message channel
+    return (await mc.getTools!()).map(({ name, title, description, inputSchema, outputSchema, origin, annotations }) => ({
       name,
       title,
       description,
       inputSchema: parseSchema(inputSchema),
+      ...(outputSchema != null && { outputSchema: parseSchema(outputSchema) }),
       origin,
       annotations,
     }));

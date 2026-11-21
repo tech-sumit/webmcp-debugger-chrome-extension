@@ -67,6 +67,7 @@ function toolMeta(toolDef: Record<string, unknown>, options?: Record<string, unk
     title: toolDef.title,
     description: toolDef.description,
     inputSchema: toolDef.inputSchema,
+    ...(toolDef.outputSchema != null && { outputSchema: toolDef.outputSchema }),
     annotations,
     readOnlyHint: annotations?.readOnlyHint === true ? true : undefined,
     ...(exposedTo && exposedTo.length > 0 && { exposedTo }),

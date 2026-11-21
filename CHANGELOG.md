@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.3.0 (2026-11-21)
+
+Tracks the November 2026 WebMCP draft.
+
+### Features
+
+- **Output schemas**: `registerTool()` calls and `getTools()` results now carry the tool's `outputSchema` (webmachinelearning/webmcp#254), and the Tool tab shows it under "Output Schema"
+- The bridge reads the spec's new `Tool` interface (#348); `Tool.source` is dropped before messaging since a `WindowProxy` can't be serialised
+- Demo: the mock `document.modelContext` returns `Tool`-shaped objects (`source`, `null` for absent schemas) and rejects a `Tool` from an earlier registration, and the calculator tool declares an `outputSchema`
+
+
 ## 1.2.0 (2026-10-23)
 
 Aligns with the October 2026 WebMCP draft and Chromium, which moved the API to `document.modelContext` and removed `navigator.modelContext` / `navigator.modelContextTesting` in Chrome 152.

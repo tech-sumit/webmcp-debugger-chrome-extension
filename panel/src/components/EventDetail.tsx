@@ -267,6 +267,7 @@ interface LoggedToolInfo {
   title?: string;
   description?: string;
   inputSchema?: unknown;
+  outputSchema?: unknown;
   annotations?: unknown;
   readOnlyHint?: boolean;
   untrustedContentHint?: boolean;
@@ -294,6 +295,7 @@ function extractToolInfo(entry: MergedEntry): LoggedToolInfo | null {
       title: t.title ? String(t.title) : undefined,
       description: t.description ? String(t.description) : undefined,
       inputSchema: t.inputSchema,
+      outputSchema: t.outputSchema,
       annotations: t.annotations,
       readOnlyHint: (t.readOnlyHint === true) || (annotations?.readOnlyHint === true) || undefined,
       untrustedContentHint: annotations?.untrustedContentHint === true || undefined,
@@ -431,6 +433,14 @@ function ToolView({ toolInfo, onExecute }: {
         <>
           <SectionHeader style={{ marginTop: 12 }}>Input Schema</SectionHeader>
           <pre style={preStyle}>{formatJson(toolInfo.inputSchema)}</pre>
+        </>
+      )}
+
+      {/* Output Schema (from TOOL_REGISTERED) */}
+      {toolInfo.outputSchema != null && (
+        <>
+          <SectionHeader style={{ marginTop: 12 }}>Output Schema</SectionHeader>
+          <pre style={preStyle}>{formatJson(toolInfo.outputSchema)}</pre>
         </>
       )}
 
