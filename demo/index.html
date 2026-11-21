@@ -592,17 +592,21 @@ if (!document.modelContext) {
           name: t.name,
           title: t.title || '',
           description: t.description,
-          inputSchema: t.inputSchema,
-          annotations: t.annotations,
+          // Spec `Tool` interface (Nov 2026): absent schemas/annotations are null
+          inputSchema: t.inputSchema ?? null,
+          outputSchema: t.outputSchema ?? null,
+          annotations: t.annotations ?? null,
           origin: location.origin,
-          window,
+          source: window,
+          _def: t, // identifies this exact registration, like Tool's internal tool id
         }))
         .sort((a, b) => (a.name < b.name ? -1 : 1));
     },
 
     async executeTool(registeredTool, input = {}) {
       const tool = mockTools.get(registeredTool.name);
-      if (!tool) throw new DOMException(`Tool "${registeredTool.name}" not found`, 'NotFoundError');
+      // A Tool from an earlier registration fails even if the name was re-registered
+      if (!tool || (registeredTool._def && registeredTool._def !== tool)) throw new DOMException(`Tool "${registeredTool.name}" not found`, 'NotFoundError');
       const args = typeof input === 'string' ? JSON.parse(input) : input;
       const controller = new AbortController();
       const result = await tool.execute(args, { signal: controller.signal });
@@ -663,6 +667,13 @@ const TOOL_DEFS = {
         expression: { type: 'string', description: 'The math expression to evaluate (e.g. "2 + 2")' }
       },
       required: ['expression']
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        result: { type: 'string', description: 'The evaluated result' },
+        error: { type: 'string', description: 'Set when the expression is invalid' }
+      }
     },
     annotations: { readOnlyHint: true },
     execute(args) {
